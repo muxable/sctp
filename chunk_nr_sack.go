@@ -151,6 +151,8 @@ func (s *chunkNRSack) marshal() ([]byte, error) {
 	binary.BigEndian.PutUint16(nrsackRaw[8:], uint16(len(s.rgapAckBlocks)))
 	binary.BigEndian.PutUint16(nrsackRaw[10:], uint16(len(s.nrgapAckBlocks)))
 	binary.BigEndian.PutUint16(nrsackRaw[12:], uint16(len(s.duplicateTSN)))
+	binary.BigEndian.PutUint16(nrsackRaw[14:], 0x00000000)
+
 	offset := NRSackHeaderSize
 	for _, g := range s.rgapAckBlocks {
 		binary.BigEndian.PutUint16(nrsackRaw[offset:], g.start)
