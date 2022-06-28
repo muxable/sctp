@@ -102,6 +102,8 @@ func (p *packet) unmarshal(raw []byte) error {
 			c = &chunkPayloadData{}
 		case ctSack:
 			c = &chunkSelectiveAck{}
+		case ctNRSack:
+			c = &chunkNRSack{}
 		case ctReconfig:
 			c = &chunkReconfig{}
 		case ctForwardTSN:
