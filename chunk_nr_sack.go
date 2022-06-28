@@ -78,6 +78,11 @@ func (g rgapAckBlock) String() string {
 	return fmt.Sprintf("%d - %d", g.start, g.end)
 }
 
+// String makes rgapAckBlock printable
+func (g nrgapAckBlock) String() string {
+	return fmt.Sprintf("%d - %d", g.start, g.end)
+}
+
 type chunkNRSack struct {
 	chunkHeader
 	cumulativeTSNAck               uint32
@@ -88,7 +93,8 @@ type chunkNRSack struct {
 }
 
 const (
-	NRSackHeaderSize = 12
+	NRSackHeaderSize   = 12
+	NRSackReservedSize = 4
 )
 
 func (s *chunkNRSack) unmarshal(raw []byte) error {
@@ -111,7 +117,9 @@ func (s *chunkNRSack) unmarshal(raw []byte) error {
 	s.nrgapAckBlocks = make([]nrgapAckBlock, binary.BigEndian.Uint16(s.raw[10:]))
 	s.duplicateTSN = make([]uint32, binary.BigEndian.Uint16(s.raw[12:]))
 
-	if len(s.raw) != NRSackHeaderSize+(4*len(s.rgapAckBlocks)+4*len(s.nrgapAckBlocks)+(4*len(s.duplicateTSN))) {
+	if len(s.raw) != NRSackHeaderSize+NRSackReservedSize+(4*len(s.rgapAckBlocks)+4*len(s.nrgapAckBlocks)+(4*len(s.duplicateTSN))) {
+		fmt.Println(len(s.raw))
+		fmt.Println(NRSackHeaderSize + (4*len(s.rgapAckBlocks) + 4*len(s.nrgapAckBlocks) + (4 * len(s.duplicateTSN))))
 		return errNRSackSizeNotMatchPredicted
 	}
 
