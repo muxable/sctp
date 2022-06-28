@@ -145,7 +145,7 @@ func (s *chunkNRSack) unmarshal(raw []byte) error {
 }
 
 func (s *chunkNRSack) marshal() ([]byte, error) {
-	nrsackRaw := make([]byte, NRSackHeaderSize+(4*len(s.rgapAckBlocks)+4*len(s.nrgapAckBlocks)+(4*len(s.duplicateTSN))))
+	nrsackRaw := make([]byte, NRSackHeaderSize+NRSackReservedSize+(4*len(s.rgapAckBlocks)+4*len(s.nrgapAckBlocks)+(4*len(s.duplicateTSN))))
 	binary.BigEndian.PutUint32(nrsackRaw[0:], s.cumulativeTSNAck)
 	binary.BigEndian.PutUint32(nrsackRaw[4:], s.advertisedReceiverWindowCredit)
 	binary.BigEndian.PutUint16(nrsackRaw[8:], uint16(len(s.rgapAckBlocks)))
