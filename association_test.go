@@ -2718,6 +2718,7 @@ func TestAssociation_HandlePacketInCookieWaitState(t *testing.T) {
 				}},
 			},
 		},
+
 		"NR-SACK": {
 			inputPacket: &packet{
 				sourcePort:      1,
