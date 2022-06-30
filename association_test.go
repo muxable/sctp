@@ -2718,6 +2718,25 @@ func TestAssociation_HandlePacketInCookieWaitState(t *testing.T) {
 				}},
 			},
 		},
+		"NR-SACK": {
+			inputPacket: &packet{
+				sourcePort:      1,
+				destinationPort: 1,
+				chunks: []chunk{&chunkNRSack{
+					cumulativeTSNAck:               1000,
+					advertisedReceiverWindowCredit: 1500,
+					duplicateTSN: []uint32{
+						3, 4,
+					},
+					rgapAckBlocks: []rgapAckBlock{
+						{start: 100, end: 200},
+					},
+					nrgapAckBlocks: []nrgapAckBlock{
+						{start: 100, end: 200},
+					},
+				}},
+			},
+		},
 		"Reconfig": {
 			inputPacket: &packet{
 				sourcePort:      1,
