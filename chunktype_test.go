@@ -22,6 +22,7 @@ func TestChunkType_String(t *testing.T) {
 		{ctCWR, "ECNE"},
 		{ctShutdownComplete, "SHUTDOWN-COMPLETE"},
 		{ctReconfig, "RECONFIG"},
+		{ctNRSack, "NR-SACK"},
 		{ctForwardTSN, "FORWARD-TSN"},
 		{chunkType(255), "Unknown ChunkType: 255"},
 	}

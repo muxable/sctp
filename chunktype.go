@@ -25,6 +25,7 @@ const (
 	ctShutdownComplete chunkType = 14
 	ctReconfig         chunkType = 130
 	ctForwardTSN       chunkType = 192
+	ctNRSack           chunkType = 0x10
 )
 
 func (c chunkType) String() string {
@@ -61,6 +62,8 @@ func (c chunkType) String() string {
 		return "RECONFIG" // Re-configuration
 	case ctForwardTSN:
 		return "FORWARD-TSN"
+	case ctNRSack:
+		return "NR-SACK"
 	default:
 		return fmt.Sprintf("Unknown ChunkType: %d", c)
 	}
