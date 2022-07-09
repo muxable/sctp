@@ -450,6 +450,7 @@ func (a *Association) Close() error {
 	a.log.Debugf("[%s] association closed", a.name)
 	a.log.Debugf("[%s] stats nDATAs (in) : %d", a.name, a.stats.getNumDATAs())
 	a.log.Debugf("[%s] stats nSACKs (in) : %d", a.name, a.stats.getNumSACKs())
+	a.log.Debugf("[%s] stats nNRSACKs (in) : %d", a.name, a.stats.getNumNRSACKs())
 	a.log.Debugf("[%s] stats nT3Timeouts : %d", a.name, a.stats.getNumT3Timeouts())
 	a.log.Debugf("[%s] stats nAckTimeouts: %d", a.name, a.stats.getNumAckTimeouts())
 	a.log.Debugf("[%s] stats nFastRetrans: %d", a.name, a.stats.getNumFastRetrans())
@@ -520,6 +521,7 @@ func (a *Association) readLoop() {
 		a.log.Debugf("[%s] association closed", a.name)
 		a.log.Debugf("[%s] stats nDATAs (in) : %d", a.name, a.stats.getNumDATAs())
 		a.log.Debugf("[%s] stats nSACKs (in) : %d", a.name, a.stats.getNumSACKs())
+		a.log.Debugf("[%s] stats nNRSACKs (in) : %d", a.name, a.stats.getNumNRSACKs())
 		a.log.Debugf("[%s] stats nT3Timeouts : %d", a.name, a.stats.getNumT3Timeouts())
 		a.log.Debugf("[%s] stats nAckTimeouts: %d", a.name, a.stats.getNumAckTimeouts())
 		a.log.Debugf("[%s] stats nFastRetrans: %d", a.name, a.stats.getNumFastRetrans())
@@ -1503,6 +1505,138 @@ func (a *Association) processSelectiveAck(d *chunkSelectiveAck) (map[uint16]int,
 	return bytesAckedPerStream, htna, nil
 }
 
+func (a *Association) processNRSACK(d *chunkNRSack) (map[uint16]int, uint32, error) { // nolint:gocognit
+	bytesAckedPerStream := map[uint16]int{}
+
+	// New ack point, so pop all ACKed packets from inflightQueue
+	// We add 1 because the "currentAckPoint" has already been popped from the inflight queue
+	// For the first SACK we take care of this by setting the ackpoint to cumAck - 1
+	for i := a.cumulativeTSNAckPoint + 1; sna32LTE(i, d.cumulativeTSNAck); i++ {
+		c, ok := a.inflightQueue.pop(i)
+		if !ok {
+			return nil, 0, fmt.Errorf("%w: %v", errInflightQueueTSNPop, i)
+		}
+
+		if !c.acked {
+			// RFC 4096 sec 6.3.2.  Retransmission Timer Rules
+			//   R3)  Whenever a SACK is received that acknowledges the DATA chunk
+			//        with the earliest outstanding TSN for that address, restart the
+			//        T3-rtx timer for that address with its current RTO (if there is
+			//        still outstanding data on that address).
+			if i == a.cumulativeTSNAckPoint+1 {
+				// T3 timer needs to be reset. Stop it for now.
+				a.t3RTX.stop()
+			}
+
+			nBytesAcked := len(c.userData)
+
+			// Sum the number of bytes acknowledged per stream
+			if amount, ok := bytesAckedPerStream[c.streamIdentifier]; ok {
+				bytesAckedPerStream[c.streamIdentifier] = amount + nBytesAcked
+			} else {
+				bytesAckedPerStream[c.streamIdentifier] = nBytesAcked
+			}
+
+			// RFC 4960 sec 6.3.1.  RTO Calculation
+			//   C4)  When data is in flight and when allowed by rule C5 below, a new
+			//        RTT measurement MUST be made each round trip.  Furthermore, new
+			//        RTT measurements SHOULD be made no more than once per round trip
+			//        for a given destination transport address.
+			//   C5)  Karn's algorithm: RTT measurements MUST NOT be made using
+			//        packets that were retransmitted (and thus for which it is
+			//        ambiguous whether the reply was for the first instance of the
+			//        chunk or for a later instance)
+			if c.nSent == 1 && sna32GTE(c.tsn, a.minTSN2MeasureRTT) {
+				a.minTSN2MeasureRTT = a.myNextTSN
+				rtt := time.Since(c.since).Seconds() * 1000.0
+				srtt := a.rtoMgr.setNewRTT(rtt)
+				a.log.Tracef("[%s] SACK: measured-rtt=%f srtt=%f new-rto=%f",
+					a.name, rtt, srtt, a.rtoMgr.getRTO())
+			}
+		}
+
+		if a.inFastRecovery && c.tsn == a.fastRecoverExitPoint {
+			a.log.Debugf("[%s] exit fast-recovery", a.name)
+			a.inFastRecovery = false
+		}
+	}
+
+	htna := d.cumulativeTSNAck
+
+	// Mark selectively acknowledged chunks as "acked"
+	for _, g := range d.rgapAckBlocks {
+		for i := g.start; i <= g.end; i++ {
+			tsn := d.cumulativeTSNAck + uint32(i)
+			c, ok := a.inflightQueue.get(tsn)
+			if !ok {
+				return nil, 0, fmt.Errorf("%w: %v", errTSNRequestNotExist, tsn)
+			}
+
+			if !c.acked {
+				nBytesAcked := a.inflightQueue.markAsAcked(tsn)
+
+				// Sum the number of bytes acknowledged per stream
+				if amount, ok := bytesAckedPerStream[c.streamIdentifier]; ok {
+					bytesAckedPerStream[c.streamIdentifier] = amount + nBytesAcked
+				} else {
+					bytesAckedPerStream[c.streamIdentifier] = nBytesAcked
+				}
+
+				a.log.Tracef("[%s] tsn=%d has been rsacked", a.name, c.tsn)
+
+				if c.nSent == 1 {
+					a.minTSN2MeasureRTT = a.myNextTSN
+					rtt := time.Since(c.since).Seconds() * 1000.0
+					srtt := a.rtoMgr.setNewRTT(rtt)
+					a.log.Tracef("[%s] rSACK: measured-rtt=%f srtt=%f new-rto=%f",
+						a.name, rtt, srtt, a.rtoMgr.getRTO())
+				}
+
+				if sna32LT(htna, tsn) {
+					htna = tsn
+				}
+			}
+		}
+	}
+
+	for _, g := range d.nrgapAckBlocks {
+		for i := g.start; i <= g.end; i++ {
+			tsn := d.cumulativeTSNAck + uint32(i)
+			c, ok := a.inflightQueue.get(tsn)
+			if !ok {
+				return nil, 0, fmt.Errorf("%w: %v", errTSNRequestNotExist, tsn)
+			}
+
+			if !c.acked {
+				nBytesAcked := a.inflightQueue.markAsAcked(tsn)
+
+				// Sum the number of bytes acknowledged per stream
+				if amount, ok := bytesAckedPerStream[c.streamIdentifier]; ok {
+					bytesAckedPerStream[c.streamIdentifier] = amount + nBytesAcked
+				} else {
+					bytesAckedPerStream[c.streamIdentifier] = nBytesAcked
+				}
+
+				a.log.Tracef("[%s] tsn=%d has been nrsacked", a.name, c.tsn)
+
+				if c.nSent == 1 {
+					a.minTSN2MeasureRTT = a.myNextTSN
+					rtt := time.Since(c.since).Seconds() * 1000.0
+					srtt := a.rtoMgr.setNewRTT(rtt)
+					a.log.Tracef("[%s] nrSACK: measured-rtt=%f srtt=%f new-rto=%f",
+						a.name, rtt, srtt, a.rtoMgr.getRTO())
+				}
+
+				if sna32LT(htna, tsn) {
+					htna = tsn
+				}
+			}
+		}
+	}
+
+	return bytesAckedPerStream, htna, nil
+}
+
 // The caller should hold the lock.
 func (a *Association) onCumulativeTSNAckPointAdvanced(totalBytesAcked int) {
 	// RFC 4096, sec 6.3.2.  Retransmission Timer Rules
@@ -1728,6 +1862,138 @@ func (a *Association) handleSack(d *chunkSelectiveAck) error {
 // The caller must hold the lock. This method was only added because the
 // linter was complaining about the "cognitive complexity" of handleSack.
 func (a *Association) postprocessSack(state uint32, shouldAwakeWriteLoop bool) {
+	switch {
+	case a.inflightQueue.size() > 0:
+		// Start timer. (noop if already started)
+		a.log.Tracef("[%s] T3-rtx timer start (pt3)", a.name)
+		a.t3RTX.start(a.rtoMgr.getRTO())
+	case state == shutdownPending:
+		// No more outstanding, send shutdown.
+		shouldAwakeWriteLoop = true
+		a.willSendShutdown = true
+		a.setState(shutdownSent)
+	case state == shutdownReceived:
+		// No more outstanding, send shutdown ack.
+		shouldAwakeWriteLoop = true
+		a.willSendShutdownAck = true
+		a.setState(shutdownAckSent)
+	}
+
+	if shouldAwakeWriteLoop {
+		a.awakeWriteLoop()
+	}
+}
+
+func (a *Association) handleNRSack(d *chunkNRSack) error {
+	a.log.Tracef("[%s] NRSACK: cumTSN=%d a_rwnd=%d", a.name, d.cumulativeTSNAck, d.advertisedReceiverWindowCredit)
+	state := a.getState()
+	if state != established && state != shutdownPending && state != shutdownReceived {
+		return nil
+	}
+
+	a.stats.incNRSACKs()
+
+	if sna32GT(a.cumulativeTSNAckPoint, d.cumulativeTSNAck) {
+		// RFC 4960 sec 6.2.1.  Processing a Received SACK
+		// D)
+		//   i) If Cumulative TSN Ack is less than the Cumulative TSN Ack
+		//      Point, then drop the SACK.  Since Cumulative TSN Ack is
+		//      monotonically increasing, a SACK whose Cumulative TSN Ack is
+		//      less than the Cumulative TSN Ack Point indicates an out-of-
+		//      order SACK.
+
+		a.log.Debugf("[%s] NRSACK Cumulative ACK %v is older than ACK point %v",
+			a.name,
+			d.cumulativeTSNAck,
+			a.cumulativeTSNAckPoint)
+
+		return nil
+	}
+
+	// Process selective ack
+	bytesAckedPerStream, htna, err := a.processNRSACK(d)
+	if err != nil {
+		return err
+	}
+
+	var totalBytesAcked int
+	for _, nBytesAcked := range bytesAckedPerStream {
+		totalBytesAcked += nBytesAcked
+	}
+
+	cumTSNAckPointAdvanced := false
+	if sna32LT(a.cumulativeTSNAckPoint, d.cumulativeTSNAck) {
+		a.log.Tracef("[%s] NRSACK: cumTSN advanced: %d -> %d",
+			a.name,
+			a.cumulativeTSNAckPoint,
+			d.cumulativeTSNAck)
+
+		a.cumulativeTSNAckPoint = d.cumulativeTSNAck
+		cumTSNAckPointAdvanced = true
+		a.onCumulativeTSNAckPointAdvanced(totalBytesAcked)
+	}
+
+	for si, nBytesAcked := range bytesAckedPerStream {
+		if s, ok := a.streams[si]; ok {
+			a.lock.Unlock()
+			s.onBufferReleased(nBytesAcked)
+			a.lock.Lock()
+		}
+	}
+
+	// New rwnd value
+	// RFC 4960 sec 6.2.1.  Processing a Received SACK
+	// D)
+	//   ii) Set rwnd equal to the newly received a_rwnd minus the number
+	//       of bytes still outstanding after processing the Cumulative
+	//       TSN Ack and the Gap Ack Blocks.
+
+	// bytes acked were already subtracted by markAsAcked() method
+	bytesOutstanding := uint32(a.inflightQueue.getNumBytes())
+	if bytesOutstanding >= d.advertisedReceiverWindowCredit {
+		a.rwnd = 0
+	} else {
+		a.rwnd = d.advertisedReceiverWindowCredit - bytesOutstanding
+	}
+
+	err = a.processFastRetransmission(d.cumulativeTSNAck, htna, cumTSNAckPointAdvanced)
+	if err != nil {
+		return err
+	}
+
+	if a.useForwardTSN {
+		// RFC 3758 Sec 3.5 C1
+		if sna32LT(a.advancedPeerTSNAckPoint, a.cumulativeTSNAckPoint) {
+			a.advancedPeerTSNAckPoint = a.cumulativeTSNAckPoint
+		}
+
+		// RFC 3758 Sec 3.5 C2
+		for i := a.advancedPeerTSNAckPoint + 1; ; i++ {
+			c, ok := a.inflightQueue.get(i)
+			if !ok {
+				break
+			}
+			if !c.abandoned() {
+				break
+			}
+			a.advancedPeerTSNAckPoint = i
+		}
+
+		// RFC 3758 Sec 3.5 C3
+		if sna32GT(a.advancedPeerTSNAckPoint, a.cumulativeTSNAckPoint) {
+			a.willSendForwardTSN = true
+		}
+		a.awakeWriteLoop()
+	}
+
+	a.postprocessNRSack(state, cumTSNAckPointAdvanced)
+
+	return nil
+}
+
+// The caller must hold the lock. This method was only added because the
+// linter was complaining about the "cognitive complexity" of handleSack.
+func (a *Association) postprocessNRSack(state uint32, shouldAwakeWriteLoop bool) {
 	switch {
 	case a.inflightQueue.size() > 0:
 		// Start timer. (noop if already started)
@@ -2346,6 +2612,9 @@ func (a *Association) handleChunk(p *packet, c chunk) error {
 
 	case *chunkSelectiveAck:
 		err = a.handleSack(c)
+
+	case *chunkNRSack:
+		err = a.handleNRSack(c)
 
 	case *chunkReconfig:
 		packets, err = a.handleReconfig(c)
