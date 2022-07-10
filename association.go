@@ -1964,7 +1964,7 @@ func (a *Association) handleNRSack(d *chunkNRSack) error {
 		a.awakeWriteLoop()
 	}
 
-	a.postprocessSack(state, cumTSNAckPointAdvanced)
+	a.postprocessNRSack(state, cumTSNAckPointAdvanced)
 
 	return nil
 }
@@ -1972,6 +1972,29 @@ func (a *Association) handleNRSack(d *chunkNRSack) error {
 // The caller must hold the lock. This method was only added because the
 // linter was complaining about the "cognitive complexity" of handleSack.
 func (a *Association) postprocessSack(state uint32, shouldAwakeWriteLoop bool) {
+	switch {
+	case a.inflightQueue.size() > 0:
+		// Start timer. (noop if already started)
+		a.log.Tracef("[%s] T3-rtx timer start (pt3)", a.name)
+		a.t3RTX.start(a.rtoMgr.getRTO())
+	case state == shutdownPending:
+		// No more outstanding, send shutdown.
+		shouldAwakeWriteLoop = true
+		a.willSendShutdown = true
+		a.setState(shutdownSent)
+	case state == shutdownReceived:
+		// No more outstanding, send shutdown ack.
+		shouldAwakeWriteLoop = true
+		a.willSendShutdownAck = true
+		a.setState(shutdownAckSent)
+	}
+
+	if shouldAwakeWriteLoop {
+		a.awakeWriteLoop()
+	}
+}
+
+func (a *Association) postprocessNRSack(state uint32, shouldAwakeWriteLoop bool) {
 	switch {
 	case a.inflightQueue.size() > 0:
 		// Start timer. (noop if already started)
