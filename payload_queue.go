@@ -151,6 +151,19 @@ func (q *payloadQueue) markAsAcked(tsn uint32) int {
 	return nBytesAcked
 }
 
+func (q *payloadQueue) markAsNRAcked(tsn uint32) int {
+	var nBytesAcked int
+	if c, ok := q.chunkMap[tsn]; ok {
+		c.acked = true
+		c.retransmit = true
+		nBytesAcked = len(c.userData)
+		q.nBytes -= nBytesAcked
+		c.userData = []byte{}
+	}
+
+	return nBytesAcked
+}
+
 func (q *payloadQueue) getLastTSNReceived() (uint32, bool) {
 	q.updateSortedKeys()
 
