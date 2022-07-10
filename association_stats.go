@@ -64,6 +64,7 @@ func (s *associationStats) getNumFastRetrans() uint64 {
 func (s *associationStats) reset() {
 	atomic.StoreUint64(&s.nDATAs, 0)
 	atomic.StoreUint64(&s.nSACKs, 0)
+	atomic.StoreUint64(&s.nNRSACKs, 0)
 	atomic.StoreUint64(&s.nT3Timeouts, 0)
 	atomic.StoreUint64(&s.nAckTimeouts, 0)
 	atomic.StoreUint64(&s.nFastRetrans, 0)
