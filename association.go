@@ -789,6 +789,23 @@ func (a *Association) gatherOutboundSackPackets(rawPackets [][]byte) [][]byte {
 	return rawPackets
 }
 
+//replaced with NRSACK to obtain out of bound packets
+func (a *Association) gatherOutboundNRSackPackets(rawPackets [][]byte) [][]byte {
+	if a.ackState == ackStateImmediate {
+		a.ackState = ackStateIdle
+		NRsack := a.createNRSelectiveAckChunk()
+		a.log.Debugf("[%s] sending NRSACK: %s", a.name, NRsack.String())
+		raw, err := a.createPacket([]chunk{NRsack}).marshal()
+		if err != nil {
+			a.log.Warnf("[%s] failed to serialize a NRSACK packet", a.name)
+		} else {
+			rawPackets = append(rawPackets, raw)
+		}
+	}
+
+	return rawPackets
+}
+
 // The caller should hold the lock
 func (a *Association) gatherOutboundForwardTSNPackets(rawPackets [][]byte) [][]byte {
 	if a.willSendForwardTSN {
@@ -1318,6 +1335,8 @@ func (a *Association) handlePeerLastTSNAndAcknowledgement(sackImmediately bool) 
 	hasPacketLoss := (a.payloadQueue.size() > 0)
 	if hasPacketLoss {
 		a.log.Tracef("[%s] packetloss: %s", a.name, a.payloadQueue.getGapAckBlocksString(a.peerLastTSN))
+		//	a.log.Tracef("[%s] packetloss: %s", a.name, a.payloadQueue.getRGapAckBlocksString(a.peerLastTSN))
+		//	a.log.Tracef("[%s] packetloss: %s", a.name, a.payloadQueue.getNRGapAckBlocksString(a.peerLastTSN))
 	}
 
 	if (a.ackState != ackStateImmediate && !sackImmediately && !hasPacketLoss && a.ackMode == ackModeNormal) || a.ackMode == ackModeAlwaysDelay {
@@ -2538,6 +2557,17 @@ func (a *Association) createSelectiveAckChunk() *chunkSelectiveAck {
 	sack.duplicateTSN = a.payloadQueue.popDuplicates()
 	sack.gapAckBlocks = a.payloadQueue.getGapAckBlocks(a.peerLastTSN)
 	return sack
+}
+
+//replaced with NRSelectiveAckChunk
+func (a *Association) createNRSelectiveAckChunk() *chunkNRSack {
+	NRsack := &chunkNRSack{}
+	NRsack.cumulativeTSNAck = a.peerLastTSN
+	NRsack.advertisedReceiverWindowCredit = a.getMyReceiverWindowCredit()
+	NRsack.duplicateTSN = a.payloadQueue.popDuplicates()
+	NRsack.rgapAckBlocks = a.payloadQueue.getRGapAckBlocks(a.peerLastTSN)
+	NRsack.nrgapAckBlocks = a.payloadQueue.getNRGapAckBlocks(a.peerLastTSN)
+	return NRsack
 }
 
 func pack(p *packet) []*packet {
