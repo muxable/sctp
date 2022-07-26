@@ -927,11 +927,13 @@ func (a *Association) gatherOutbound() ([][]byte, bool) {
 		rawPackets = a.gatherOutboundDataAndReconfigPackets(rawPackets)
 		rawPackets = a.gatherOutboundFastRetransmissionPackets(rawPackets)
 		rawPackets = a.gatherOutboundSackPackets(rawPackets)
+		rawPackets = a.gatherOutboundNRSackPackets(rawPackets)
 		rawPackets = a.gatherOutboundForwardTSNPackets(rawPackets)
 	case shutdownPending, shutdownSent, shutdownReceived:
 		rawPackets = a.gatherDataPacketsToRetransmit(rawPackets)
 		rawPackets = a.gatherOutboundFastRetransmissionPackets(rawPackets)
 		rawPackets = a.gatherOutboundSackPackets(rawPackets)
+		rawPackets = a.gatherOutboundNRSackPackets(rawPackets)
 		rawPackets, ok = a.gatherOutboundShutdownPackets(rawPackets)
 	case shutdownAckSent:
 		rawPackets, ok = a.gatherOutboundShutdownPackets(rawPackets)
