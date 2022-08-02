@@ -210,23 +210,6 @@ func (q *payloadQueue) getGapAckBlocksString(cumulativeTSN uint32) string {
 	return str
 }
 
-// func (q *payloadQueue) getNRGapAckBlocksString(cumulativeTSN uint32) string {
-// 	nrgapAckBlocks := q.getNRGapAckBlocks(cumulativeTSN)
-// 	str := fmt.Sprintf("cumTSN=%d", cumulativeTSN)
-// 	for _, b := range nrgapAckBlocks {
-// 		str += fmt.Sprintf(",%d-%d", b.start, b.end)
-// 	}
-// 	return str
-// }
-// func (q *payloadQueue) getRGapAckBlocksString(cumulativeTSN uint32) string {
-// 	rgapAckBlocks := q.getRGapAckBlocks(cumulativeTSN)
-// 	str := fmt.Sprintf("cumTSN=%d", cumulativeTSN)
-// 	for _, b := range rgapAckBlocks {
-// 		str += fmt.Sprintf(",%d-%d", b.start, b.end)
-// 	}
-// 	return str
-// }
-
 func (q *payloadQueue) markAsAcked(tsn uint32) int {
 	var nBytesAcked int
 	if c, ok := q.chunkMap[tsn]; ok {
