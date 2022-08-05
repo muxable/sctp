@@ -35,6 +35,7 @@ func bufferSplitting(senderBuff senderBuffer) senderBuffer{
 }
 
 func main() {
+	// TestCase 1: Objective: Test splitting when exactly divisible between all paths
 	buff := make([][]byte, 20)
 	for i := range buff {
 		buff[i] = make([]byte, 10)
@@ -46,4 +47,19 @@ func main() {
 	for i := range sendBuff.splits{
 		fmt.Print(sendBuff.splits[i],"\n")
 	}
+
+	/*
+	// TestCase 2: Objective: Test splitting when not exactly divisible between all paths
+	buff := make([][]byte, 22)
+	for i := range buff {
+		buff[i] = make([]byte, 10)
+	}
+	
+	paths := 5
+	sendBuff := senderBuffer{buffer: buff, paths: paths,bufferSize: uint32(len(buff))}
+	sendBuff = bufferSplitting(sendBuff)
+	for i := range sendBuff.splits{
+		fmt.Print(sendBuff.splits[i],"\n")
+	}
+	*/
 }
