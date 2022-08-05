@@ -1,18 +1,25 @@
 package sctp
 
-func bufferSplitting(senderBuff senderBuffer) {
+func bufferSplitting(senderBuff senderBuffer) senderBuffer {
 
 	tempBuff := senderBuff.buffer
 	splitSize := uint(int(senderBuff.bufferSize) / len(senderBuff.paths))
-	var senderSplits [][]byte
-	for (len(tempBuff) > 0) && (uint(len(tempBuff)) > splitSize) {
+	var senderSplits [][][]byte
+	for (len(tempBuff) > 0) && (uint(len(tempBuff)) >= splitSize) {
 		senderSplits = append(senderSplits, senderBuff.buffer[0:splitSize])
 		tempBuff = tempBuff[splitSize:]
 	}
 	if len(tempBuff) > 0 {
 		senderSplits = append(senderSplits, tempBuff)
 	}
+	/*
+		// As an alternative, we can add if anything extra to the first buffer split and increase its size
+		if len(tempBuff) > 0{
+			senderSplits[0] = append(senderSplits[0], tempBuff...)
+		}
+	*/
 	senderBuff.splits = senderSplits
+	return senderBuff
 }
 
 func sendCond_bufferedBytes(senderBuff senderBuffer, path *Association) bool {
