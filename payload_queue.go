@@ -129,6 +129,78 @@ func (q *payloadQueue) getGapAckBlocks(cumulativeTSN uint32) (gapAckBlocks []gap
 	return gapAckBlocks
 }
 
+func (q *payloadQueue) getRGapAckBlocks(cumulativeTSN uint32) (rgapAckBlocks []rgapAckBlock) {
+	var b rgapAckBlock
+
+	if len(q.chunkMap) == 0 {
+		return []rgapAckBlock{}
+	}
+
+	q.updateSortedKeys()
+
+	for i, tsn := range q.sorted {
+		if i == 0 {
+			b.start = uint16(tsn - cumulativeTSN)
+			b.end = b.start
+			continue
+		}
+		diff := uint16(tsn - cumulativeTSN)
+		if b.end+1 == diff {
+			b.end++
+		} else {
+			rgapAckBlocks = append(rgapAckBlocks, rgapAckBlock{
+				start: b.start,
+				end:   b.end,
+			})
+			b.start = diff
+			b.end = diff
+		}
+	}
+
+	rgapAckBlocks = append(rgapAckBlocks, rgapAckBlock{
+		start: b.start,
+		end:   b.end,
+	})
+
+	return rgapAckBlocks
+}
+
+func (q *payloadQueue) getNRGapAckBlocks(cumulativeTSN uint32) (nrgapAckBlocks []nrgapAckBlock) {
+	var b nrgapAckBlock
+
+	if len(q.chunkMap) == 0 {
+		return []nrgapAckBlock{}
+	}
+
+	q.updateSortedKeys()
+
+	for i, tsn := range q.sorted {
+		if i == 0 {
+			b.start = uint16(tsn - cumulativeTSN)
+			b.end = b.start
+			continue
+		}
+		diff := uint16(tsn - cumulativeTSN)
+		if b.end+1 == diff {
+			b.end++
+		} else {
+			nrgapAckBlocks = append(nrgapAckBlocks, nrgapAckBlock{
+				start: b.start,
+				end:   b.end,
+			})
+			b.start = diff
+			b.end = diff
+		}
+	}
+
+	nrgapAckBlocks = append(nrgapAckBlocks, nrgapAckBlock{
+		start: b.start,
+		end:   b.end,
+	})
+
+	return nrgapAckBlocks
+}
+
 func (q *payloadQueue) getGapAckBlocksString(cumulativeTSN uint32) string {
 	gapAckBlocks := q.getGapAckBlocks(cumulativeTSN)
 	str := fmt.Sprintf("cumTSN=%d", cumulativeTSN)

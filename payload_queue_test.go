@@ -86,6 +86,68 @@ func TestPayloadQueue(t *testing.T) {
 		assert.Equal(t, gab1[1].end, gab2[1].end)
 	})
 
+	t.Run("getRGapAckBlocks", func(t *testing.T) {
+		pq := newPayloadQueue()
+		pq.push(makePayload(1, 0), 0)
+		pq.push(makePayload(2, 0), 0)
+		pq.push(makePayload(3, 0), 0)
+		pq.push(makePayload(4, 0), 0)
+		pq.push(makePayload(5, 0), 0)
+		pq.push(makePayload(6, 0), 0)
+
+		rgab1 := []*rgapAckBlock{{start: 1, end: 6}}
+		rgab2 := pq.getRGapAckBlocks(0)
+		assert.NotNil(t, rgab2)
+		assert.Len(t, rgab2, 1)
+
+		assert.Equal(t, rgab1[0].start, rgab1[0].start)
+		assert.Equal(t, rgab1[0].end, rgab1[0].end)
+
+		pq.push(makePayload(8, 0), 0)
+		pq.push(makePayload(9, 0), 0)
+
+		rgab1 = []*rgapAckBlock{{start: 1, end: 6}, {start: 8, end: 9}}
+		rgab2 = pq.getRGapAckBlocks(0)
+		assert.NotNil(t, rgab2)
+		assert.Len(t, rgab2, 2)
+
+		assert.Equal(t, rgab1[0].start, rgab2[0].start)
+		assert.Equal(t, rgab1[0].end, rgab2[0].end)
+		assert.Equal(t, rgab1[1].start, rgab2[1].start)
+		assert.Equal(t, rgab1[1].end, rgab2[1].end)
+	})
+
+	t.Run("getNRGapAckBlocks", func(t *testing.T) {
+		pq := newPayloadQueue()
+		pq.push(makePayload(1, 0), 0)
+		pq.push(makePayload(2, 0), 0)
+		pq.push(makePayload(3, 0), 0)
+		pq.push(makePayload(4, 0), 0)
+		pq.push(makePayload(5, 0), 0)
+		pq.push(makePayload(6, 0), 0)
+
+		nrgab1 := []*nrgapAckBlock{{start: 1, end: 6}}
+		nrgab2 := pq.getNRGapAckBlocks(0)
+		assert.NotNil(t, nrgab2)
+		assert.Len(t, nrgab2, 1)
+
+		assert.Equal(t, nrgab1[0].start, nrgab1[0].start)
+		assert.Equal(t, nrgab1[0].end, nrgab1[0].end)
+
+		pq.push(makePayload(8, 0), 0)
+		pq.push(makePayload(9, 0), 0)
+
+		nrgab1 = []*nrgapAckBlock{{start: 1, end: 6}, {start: 8, end: 9}}
+		nrgab2 = pq.getNRGapAckBlocks(0)
+		assert.NotNil(t, nrgab2)
+		assert.Len(t, nrgab2, 2)
+
+		assert.Equal(t, nrgab1[0].start, nrgab2[0].start)
+		assert.Equal(t, nrgab1[0].end, nrgab2[0].end)
+		assert.Equal(t, nrgab1[1].start, nrgab2[1].start)
+		assert.Equal(t, nrgab1[1].end, nrgab2[1].end)
+	})
+
 	t.Run("getLastTSNReceived", func(t *testing.T) {
 		pq := newPayloadQueue()
 
