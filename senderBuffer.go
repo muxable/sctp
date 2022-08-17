@@ -13,9 +13,6 @@ func newSenderBuffer(paths []*Association) *senderBuffer {
 	senderBuff := senderBuffer{buffer: []*chunkPayloadData{}, paths: paths, splits: [][]*chunkPayloadData{}}
 	senderBuff.bufferSize = uint32(len(senderBuff.buffer))
 	a := make([][]*chunkPayloadData, len(paths))
-	for i := range a {
-		a[i] = make([]*chunkPayloadData, 0)
-	}
 	senderBuff.bufferedAmount = make([]uint32, len(paths))
 	senderBuff.bufferedAmountOutstandingBytes = make([]uint32, len(paths))
 	senderBuff.splits = a
