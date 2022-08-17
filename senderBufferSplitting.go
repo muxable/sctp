@@ -4,7 +4,7 @@ func bufferSplitting(senderBuff senderBuffer) senderBuffer {
 
 	tempBuff := senderBuff.buffer
 	splitSize := uint(int(senderBuff.bufferSize) / len(senderBuff.paths))
-	var senderSplits [][][]byte
+	var senderSplits [][]*chunkPayloadData
 	for (len(tempBuff) > 0) && (uint(len(tempBuff)) >= splitSize) {
 		senderSplits = append(senderSplits, senderBuff.buffer[0:splitSize])
 		tempBuff = tempBuff[splitSize:]
@@ -22,7 +22,7 @@ func bufferSplitting(senderBuff senderBuffer) senderBuffer {
 	return senderBuff
 }
 
-func sendCond_bufferedBytes(senderBuff senderBuffer, path *Association) bool {
+func sendCond_bufferedBytes(senderBuff *senderBuffer, path *Association) bool {
 
 	var pathIdx int
 	for i := range senderBuff.paths {
@@ -31,6 +31,11 @@ func sendCond_bufferedBytes(senderBuff senderBuffer, path *Association) bool {
 			break
 		}
 	}
+	return senderBuff.bufferedAmount[pathIdx]+senderBuff.paths[pathIdx].mtu <= uint32(int(senderBuff.bufferSize)/len(senderBuff.paths))
+}
+
+func sendCond_bufferedBytes_pathIdx(senderBuff *senderBuffer, pathIdx int) bool {
+
 	return senderBuff.bufferedAmount[pathIdx]+senderBuff.paths[pathIdx].mtu <= uint32(int(senderBuff.bufferSize)/len(senderBuff.paths))
 }
 
